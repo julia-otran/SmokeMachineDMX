@@ -1,14 +1,31 @@
 #include <Arduino.h>
+#include <EEPROM.h>
 
 #define RELAY_ACTUATOR_PIN 5
 #define RELAY_DEBOUNCE_FRAMES 10
 #define DMX_BAUD_RATE 250000L
 #define F_BAUD_DIV ((64L * 20000000L) / 16L)
 #define DMX_CHANNELS 512
+#define EEPROM_DEFAULT_CONTROL_DMX_CHANNEL 192
+#define DMX_CHANNEL_PROGRAM_PORTA_PIN 6
 
-uint16_t control_dmx_channel = 300;
+struct EEPROMData {
+  uint16_t control_dmx_channel;
+};
+
+uint16_t control_dmx_channel = EEPROM_DEFAULT_CONTROL_DMX_CHANNEL;
+EEPROMData eeprom_data;
 
 void setup() {
+  EEPROM.get(0, eeprom_data);
+
+  if (eeprom_data.control_dmx_channel <= 0 || eeprom_data.control_dmx_channel > DMX_CHANNELS) {   
+    eeprom_data.control_dmx_channel = EEPROM_DEFAULT_CONTROL_DMX_CHANNEL;
+    EEPROM.put(0, eeprom_data);
+  }
+
+  control_dmx_channel = eeprom_data.control_dmx_channel;
+
   PORTB_DIRSET = 1 << 2;
   PORTB_DIRCLR = 1 << 1;
 
@@ -53,11 +70,11 @@ int16_t current_dmx_byte_num = 0;
 uint8_t current_dmx_ignore_frame = 0;
 uint8_t current_dmx_debounce_frame_count = 0;
 uint8_t current_dmx_no_signal = 0;
+uint8_t current_dmx_count_channels_with_value = 0;
+uint8_t current_dmx_eligible_channel = 0;
 uint8_t relay_is_enabled = 0;
 uint8_t relay_change_pending = 0;
 uint8_t relay_should_be_enabled = 0;
-
-uint8_t tca_debug = 0;
 
 ISR(TCA0_OVF_vect) {
   if (TCA0_SINGLE_INTFLAGS & 0x1) {
@@ -78,6 +95,7 @@ void loop() {
   uint8_t received_val = 0;
   uint8_t received_flag = 0;
   uint8_t data_received = 0;
+  uint8_t reprogram_flag = PORTA_IN & (1 << DMX_CHANNEL_PROGRAM_PORTA_PIN);
 
   if (USART0_STATUS & USART_RXCIF_bm) {
     TCB0_CNT = (uint16_t)0;
@@ -95,7 +113,7 @@ void loop() {
     current_dmx_ignore_frame = 1;
   }
 
-  if (current_dmx_byte_num > DMX_CHANNELS) {
+  if (data_received && current_dmx_byte_num > DMX_CHANNELS) {
     current_dmx_ignore_frame = 1;
   }
 
@@ -107,12 +125,49 @@ void loop() {
     current_dmx_ignore_frame = 1;
   }
 
+  if (current_dmx_ignore_frame) {
+    current_dmx_eligible_channel = 0;
+    current_dmx_count_channels_with_value = 0;
+  }
+
   if (data_received && current_dmx_byte_num == 0 && !current_dmx_ignore_frame) {
     current_dmx_no_signal = 0;
     TCA0_SINGLE_CNT = (uint16_t)0;
   }
 
   if (
+    !current_dmx_ignore_frame &&
+    !current_dmx_no_signal &&
+    current_dmx_byte_num > 0 &&
+    received_val != 0 &&
+    data_received &&
+    current_dmx_eligible_channel != current_dmx_byte_num
+  ) {
+    current_dmx_count_channels_with_value += 1;
+    current_dmx_eligible_channel = current_dmx_byte_num;
+  }
+
+  if (data_received && current_dmx_byte_num == 0 && current_dmx_count_channels_with_value != 1) {
+    current_dmx_eligible_channel = 0;
+    current_dmx_count_channels_with_value = 0;
+  }
+
+  if (
+    !current_dmx_ignore_frame &&
+    !current_dmx_no_signal &&
+    current_dmx_byte_num == 0 &&
+    current_dmx_count_channels_with_value == 1 &&
+    current_dmx_eligible_channel &&
+    reprogram_flag &&
+    control_dmx_channel != current_dmx_eligible_channel
+  ) {
+    control_dmx_channel = current_dmx_eligible_channel;
+    eeprom_data.control_dmx_channel = control_dmx_channel;
+    EEPROM.put(0, eeprom_data);
+  }
+
+  if (
+    current_dmx_eligible_channel &&
     data_received && 
     current_dmx_byte_num == 0 && 
     current_dmx_debounce_frame_count < UINT8_MAX

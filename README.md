@@ -7,7 +7,12 @@ Simple Smoke Machine DMX Controller
 
 The main goal is to be used to control a smoke machine, but the relay can be connected to other things
 
-TODO's
-======
+DMX Channel Programming
+===
 
-- DMX channel is hard-coded, still need to be saved on micro-controller EEPROM and programmed by some way
+- Set all DMX Channel values to 0
+- Set desired DMX Channel to 255
+- Pull-up PA6 Pin
+- If it succeeds smoke machine will be triggered
+- Turn down the desired channel to stop smoke machine
+
