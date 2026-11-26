@@ -36,8 +36,8 @@ void setup() {
   int16_t sigrow_val = SIGROW_OSC20ERR5V;
   int32_t baud_reg_val = DMX_BAUD_RATE;
 
-  baud_reg_val *= (1024 + sigrow_val);
-  baud_reg_val /= 1024;
+  // baud_reg_val *= (1024 + sigrow_val);
+  // baud_reg_val /= 1024;
 
   USART0_BAUD = (uint16_t) (F_BAUD_DIV / baud_reg_val);
 
@@ -70,8 +70,8 @@ int16_t current_dmx_byte_num = 0;
 uint8_t current_dmx_ignore_frame = 0;
 uint8_t current_dmx_debounce_frame_count = 0;
 uint8_t current_dmx_no_signal = 0;
-uint8_t current_dmx_count_channels_with_value = 0;
-uint8_t current_dmx_eligible_channel = 0;
+uint16_t current_dmx_count_channels_with_value = 0;
+uint16_t current_dmx_eligible_channel = 0;
 uint8_t relay_is_enabled = 0;
 uint8_t relay_change_pending = 0;
 uint8_t relay_should_be_enabled = 0;
